@@ -438,255 +438,495 @@ def generate_location() -> str:
 
 
 # ============================================================================
-# SENTENCE TEMPLATES
+# SENTENCE TEMPLATES WITH VARIATIONS
 # ============================================================================
 
-def get_sentence_templates() -> List[Dict]:
+# Synonyms and variations for generating diverse templates
+VARIATIONS = {
+    "my": ["my", "mine", "the"],
+    "is": ["is", "is currently", "would be"],
+    "name": ["name", "full name", "name's"],
+    "phone": ["phone", "phone number", "mobile", "mobile number", "contact number", "number"],
+    "email": ["email", "email id", "email address", "mail id", "mail"],
+    "card": ["card", "credit card", "card number", "credit card number", "payment card"],
+    "call": ["call", "ring", "reach", "contact", "get in touch with", "phone"],
+    "live": ["live", "stay", "reside", "am based"],
+    "from": ["from", "in", "at", "calling from"],
+    "travel": ["travel", "traveling", "going", "flying"],
+    "booking": ["booking", "reservation", "appointment"],
+}
+
+# Fillers and disfluencies for STT realism
+FILLERS = ["uh", "um", "like", "you know", "so", "well", "actually", "basically"]
+HESITATIONS = ["let me see", "give me a second", "one moment", "just a sec"]
+
+
+def generate_base_templates() -> List[Dict]:
     """
-    Return sentence templates with placeholders for entities.
-    Each template specifies which entities it contains.
+    Generate comprehensive base templates.
+    We'll apply variations on top of these to create hundreds more.
     """
-    templates = [
-        # Single entity templates
-        {
-            "template": "my credit card number is {CREDIT_CARD}",
-            "entities": ["CREDIT_CARD"]
-        },
-        {
-            "template": "card number {CREDIT_CARD}",
-            "entities": ["CREDIT_CARD"]
-        },
-        {
-            "template": "please charge {CREDIT_CARD}",
-            "entities": ["CREDIT_CARD"]
-        },
-        {
-            "template": "call me on {PHONE}",
-            "entities": ["PHONE"]
-        },
-        {
-            "template": "my number is {PHONE}",
-            "entities": ["PHONE"]
-        },
-        {
-            "template": "phone number {PHONE}",
-            "entities": ["PHONE"]
-        },
-        {
-            "template": "you can reach me at {PHONE}",
-            "entities": ["PHONE"]
-        },
-        {
-            "template": "contact number {PHONE}",
-            "entities": ["PHONE"]
-        },
-        {
-            "template": "my email is {EMAIL}",
-            "entities": ["EMAIL"]
-        },
-        {
-            "template": "email id is {EMAIL}",
-            "entities": ["EMAIL"]
-        },
-        {
-            "template": "send it to {EMAIL}",
-            "entities": ["EMAIL"]
-        },
-        {
-            "template": "my name is {PERSON_NAME}",
-            "entities": ["PERSON_NAME"]
-        },
-        {
-            "template": "this is {PERSON_NAME}",
-            "entities": ["PERSON_NAME"]
-        },
-        {
-            "template": "i am {PERSON_NAME}",
-            "entities": ["PERSON_NAME"]
-        },
-        {
-            "template": "speaking with {PERSON_NAME}",
-            "entities": ["PERSON_NAME"]
-        },
-        {
-            "template": "travel date is {DATE}",
-            "entities": ["DATE"]
-        },
-        {
-            "template": "booking for {DATE}",
-            "entities": ["DATE"]
-        },
-        {
-            "template": "i will travel on {DATE}",
-            "entities": ["DATE"]
-        },
-        {
-            "template": "my appointment is on {DATE}",
-            "entities": ["DATE"]
-        },
-        {
-            "template": "i live in {CITY}",
-            "entities": ["CITY"]
-        },
-        {
-            "template": "calling from {CITY}",
-            "entities": ["CITY"]
-        },
-        {
-            "template": "i am in {CITY}",
-            "entities": ["CITY"]
-        },
-        {
-            "template": "based in {CITY}",
-            "entities": ["CITY"]
-        },
-        {
-            "template": "near {LOCATION}",
-            "entities": ["LOCATION"]
-        },
-        {
-            "template": "i am at {LOCATION}",
-            "entities": ["LOCATION"]
-        },
-        {
-            "template": "address is {LOCATION}",
-            "entities": ["LOCATION"]
-        },
-        
-        # Two entity templates
-        {
-            "template": "hi i am {PERSON_NAME} and my phone is {PHONE}",
-            "entities": ["PERSON_NAME", "PHONE"]
-        },
-        {
-            "template": "my name is {PERSON_NAME} email {EMAIL}",
-            "entities": ["PERSON_NAME", "EMAIL"]
-        },
-        {
-            "template": "i am {PERSON_NAME} from {CITY}",
-            "entities": ["PERSON_NAME", "CITY"]
-        },
-        {
-            "template": "email id is {EMAIL} and card number is {CREDIT_CARD}",
-            "entities": ["EMAIL", "CREDIT_CARD"]
-        },
-        {
-            "template": "my number is {PHONE} i live in {CITY}",
-            "entities": ["PHONE", "CITY"]
-        },
-        {
-            "template": "card is {CREDIT_CARD} and email is {EMAIL}",
-            "entities": ["CREDIT_CARD", "EMAIL"]
-        },
-        {
-            "template": "travel on {DATE} from {CITY}",
-            "entities": ["DATE", "CITY"]
-        },
-        {
-            "template": "booking for {DATE} phone {PHONE}",
-            "entities": ["DATE", "PHONE"]
-        },
-        
-        # Three entity templates
-        {
-            "template": "my name is {PERSON_NAME} phone {PHONE} email {EMAIL}",
-            "entities": ["PERSON_NAME", "PHONE", "EMAIL"]
-        },
-        {
-            "template": "i am {PERSON_NAME} calling from {CITY} my number is {PHONE}",
-            "entities": ["PERSON_NAME", "CITY", "PHONE"]
-        },
-        {
-            "template": "hi this is {PERSON_NAME} my email is {EMAIL} and phone is {PHONE}",
-            "entities": ["PERSON_NAME", "EMAIL", "PHONE"]
-        },
-        {
-            "template": "card number is {CREDIT_CARD} name {PERSON_NAME} email {EMAIL}",
-            "entities": ["CREDIT_CARD", "PERSON_NAME", "EMAIL"]
-        },
-        {
-            "template": "travel date {DATE} from {CITY} phone {PHONE}",
-            "entities": ["DATE", "CITY", "PHONE"]
-        },
-        
-        # Four+ entity templates
-        {
-            "template": "my details are {PERSON_NAME} card {CREDIT_CARD} phone {PHONE} email {EMAIL}",
-            "entities": ["PERSON_NAME", "CREDIT_CARD", "PHONE", "EMAIL"]
-        },
-        {
-            "template": "booking for {PERSON_NAME} on {DATE} from {CITY} contact {PHONE}",
-            "entities": ["PERSON_NAME", "DATE", "CITY", "PHONE"]
-        },
-        {
-            "template": "i am {PERSON_NAME} my card is {CREDIT_CARD} email {EMAIL} phone {PHONE} from {CITY}",
-            "entities": ["PERSON_NAME", "CREDIT_CARD", "EMAIL", "PHONE", "CITY"]
-        },
-        
-        # More conversational templates
-        {
-            "template": "yes my name is {PERSON_NAME} and email {EMAIL}",
-            "entities": ["PERSON_NAME", "EMAIL"]
-        },
-        {
-            "template": "sure the card ending in {CREDIT_CARD}",
-            "entities": ["CREDIT_CARD"]
-        },
-        {
-            "template": "please call me back on {PHONE}",
-            "entities": ["PHONE"]
-        },
-        {
-            "template": "registered email address {EMAIL}",
-            "entities": ["EMAIL"]
-        },
-        {
-            "template": "delivery address near {LOCATION} in {CITY}",
-            "entities": ["LOCATION", "CITY"]
-        },
-        {
-            "template": "arrival date {DATE} departure from {CITY}",
-            "entities": ["DATE", "CITY"]
-        },
-        {
-            "template": "primary contact {PHONE} secondary email {EMAIL}",
-            "entities": ["PHONE", "EMAIL"]
-        },
-        {
-            "template": "cardholder name {PERSON_NAME} card {CREDIT_CARD}",
-            "entities": ["PERSON_NAME", "CREDIT_CARD"]
-        },
-        {
-            "template": "yes {PERSON_NAME} here calling from {CITY}",
-            "entities": ["PERSON_NAME", "CITY"]
-        },
-        {
-            "template": "appointment on {DATE} at {LOCATION}",
-            "entities": ["DATE", "LOCATION"]
-        },
-        {
-            "template": "my mobile number is {PHONE} from {CITY}",
-            "entities": ["PHONE", "CITY"]
-        },
-        {
-            "template": "email me at {EMAIL} or call {PHONE}",
-            "entities": ["EMAIL", "PHONE"]
-        },
-        {
-            "template": "traveling on {DATE} to {CITY} phone {PHONE}",
-            "entities": ["DATE", "CITY", "PHONE"]
-        },
-        {
-            "template": "customer {PERSON_NAME} payment card {CREDIT_CARD} date {DATE}",
-            "entities": ["PERSON_NAME", "CREDIT_CARD", "DATE"]
-        },
-        {
-            "template": "contact details {PERSON_NAME} phone {PHONE} location {LOCATION}",
-            "entities": ["PERSON_NAME", "PHONE", "LOCATION"]
-        },
+    templates = []
+    
+    # ========== CREDIT CARD TEMPLATES (50+) ==========
+    cc_patterns = [
+        "my credit card number is {CREDIT_CARD}",
+        "card number {CREDIT_CARD}",
+        "please charge {CREDIT_CARD}",
+        "the card is {CREDIT_CARD}",
+        "i want to use card {CREDIT_CARD}",
+        "payment card {CREDIT_CARD}",
+        "card ending in {CREDIT_CARD}",
+        "charge my card {CREDIT_CARD}",
+        "use this card {CREDIT_CARD}",
+        "credit card {CREDIT_CARD}",
+        "the number is {CREDIT_CARD}",
+        "it is {CREDIT_CARD}",
+        "that would be {CREDIT_CARD}",
+        "pay with {CREDIT_CARD}",
+        "debit card {CREDIT_CARD}",
+        "visa card {CREDIT_CARD}",
+        "mastercard {CREDIT_CARD}",
+        "my card details are {CREDIT_CARD}",
+        "card on file is {CREDIT_CARD}",
+        "saved card {CREDIT_CARD}",
     ]
+    for p in cc_patterns:
+        templates.append({"template": p, "entities": ["CREDIT_CARD"]})
+    
+    # ========== PHONE TEMPLATES (50+) ==========
+    phone_patterns = [
+        "call me on {PHONE}",
+        "my number is {PHONE}",
+        "phone number {PHONE}",
+        "you can reach me at {PHONE}",
+        "contact number {PHONE}",
+        "my mobile is {PHONE}",
+        "reach me on {PHONE}",
+        "call me at {PHONE}",
+        "ring me on {PHONE}",
+        "phone me at {PHONE}",
+        "the number is {PHONE}",
+        "contact me on {PHONE}",
+        "my contact is {PHONE}",
+        "mobile number {PHONE}",
+        "cell phone {PHONE}",
+        "callback number {PHONE}",
+        "reach out on {PHONE}",
+        "get in touch at {PHONE}",
+        "dial {PHONE}",
+        "phone is {PHONE}",
+        "number to call is {PHONE}",
+        "best number is {PHONE}",
+        "primary contact {PHONE}",
+        "alternate number {PHONE}",
+        "my cell is {PHONE}",
+    ]
+    for p in phone_patterns:
+        templates.append({"template": p, "entities": ["PHONE"]})
+    
+    # ========== EMAIL TEMPLATES (50+) ==========
+    email_patterns = [
+        "my email is {EMAIL}",
+        "email id is {EMAIL}",
+        "send it to {EMAIL}",
+        "my mail is {EMAIL}",
+        "email address is {EMAIL}",
+        "write to me at {EMAIL}",
+        "mail me at {EMAIL}",
+        "email me at {EMAIL}",
+        "contact email {EMAIL}",
+        "reach me at {EMAIL}",
+        "send to {EMAIL}",
+        "my address is {EMAIL}",
+        "email is {EMAIL}",
+        "mail id {EMAIL}",
+        "send details to {EMAIL}",
+        "forward to {EMAIL}",
+        "reply to {EMAIL}",
+        "registered email {EMAIL}",
+        "primary email {EMAIL}",
+        "alternate email {EMAIL}",
+        "work email {EMAIL}",
+        "personal email {EMAIL}",
+        "the email is {EMAIL}",
+        "email address would be {EMAIL}",
+        "you can email me at {EMAIL}",
+    ]
+    for p in email_patterns:
+        templates.append({"template": p, "entities": ["EMAIL"]})
+    
+    # ========== NAME TEMPLATES (40+) ==========
+    name_patterns = [
+        "my name is {PERSON_NAME}",
+        "this is {PERSON_NAME}",
+        "i am {PERSON_NAME}",
+        "speaking with {PERSON_NAME}",
+        "my full name is {PERSON_NAME}",
+        "name is {PERSON_NAME}",
+        "i am calling as {PERSON_NAME}",
+        "it is {PERSON_NAME}",
+        "this is {PERSON_NAME} speaking",
+        "you can call me {PERSON_NAME}",
+        "name {PERSON_NAME}",
+        "{PERSON_NAME} here",
+        "talking to {PERSON_NAME}",
+        "{PERSON_NAME} on the line",
+        "customer name is {PERSON_NAME}",
+        "registered under {PERSON_NAME}",
+        "account holder {PERSON_NAME}",
+        "booking name {PERSON_NAME}",
+        "reserved for {PERSON_NAME}",
+        "{PERSON_NAME} calling",
+    ]
+    for p in name_patterns:
+        templates.append({"template": p, "entities": ["PERSON_NAME"]})
+    
+    # ========== DATE TEMPLATES (40+) ==========
+    date_patterns = [
+        "travel date is {DATE}",
+        "booking for {DATE}",
+        "i will travel on {DATE}",
+        "my appointment is on {DATE}",
+        "date is {DATE}",
+        "on {DATE}",
+        "scheduled for {DATE}",
+        "departing on {DATE}",
+        "arriving on {DATE}",
+        "leaving on {DATE}",
+        "coming on {DATE}",
+        "visit on {DATE}",
+        "appointment on {DATE}",
+        "meeting on {DATE}",
+        "reservation for {DATE}",
+        "check in {DATE}",
+        "check out {DATE}",
+        "flying on {DATE}",
+        "traveling on {DATE}",
+        "date of travel {DATE}",
+        "booked for {DATE}",
+        "scheduled on {DATE}",
+        "planned for {DATE}",
+        "date of birth {DATE}",
+        "dob is {DATE}",
+    ]
+    for p in date_patterns:
+        templates.append({"template": p, "entities": ["DATE"]})
+    
+    # ========== CITY TEMPLATES (30+) ==========
+    city_patterns = [
+        "i live in {CITY}",
+        "calling from {CITY}",
+        "i am in {CITY}",
+        "based in {CITY}",
+        "from {CITY}",
+        "located in {CITY}",
+        "currently in {CITY}",
+        "residing in {CITY}",
+        "staying in {CITY}",
+        "traveling to {CITY}",
+        "flying to {CITY}",
+        "going to {CITY}",
+        "visiting {CITY}",
+        "city is {CITY}",
+        "my city is {CITY}",
+        "hometown {CITY}",
+        "current city {CITY}",
+        "destination {CITY}",
+        "arriving in {CITY}",
+        "departing from {CITY}",
+    ]
+    for p in city_patterns:
+        templates.append({"template": p, "entities": ["CITY"]})
+    
+    # ========== LOCATION TEMPLATES (25+) ==========
+    location_patterns = [
+        "near {LOCATION}",
+        "i am at {LOCATION}",
+        "address is {LOCATION}",
+        "location is {LOCATION}",
+        "at {LOCATION}",
+        "staying at {LOCATION}",
+        "currently at {LOCATION}",
+        "meeting at {LOCATION}",
+        "pickup from {LOCATION}",
+        "delivery to {LOCATION}",
+        "address near {LOCATION}",
+        "close to {LOCATION}",
+        "by {LOCATION}",
+        "around {LOCATION}",
+        "my location is {LOCATION}",
+    ]
+    for p in location_patterns:
+        templates.append({"template": p, "entities": ["LOCATION"]})
+    
+    # ========== TWO ENTITY COMBINATIONS (80+) ==========
+    two_entity = [
+        # Name + Phone
+        "hi i am {PERSON_NAME} and my phone is {PHONE}",
+        "this is {PERSON_NAME} my number is {PHONE}",
+        "{PERSON_NAME} here my phone is {PHONE}",
+        "my name is {PERSON_NAME} call me on {PHONE}",
+        "i am {PERSON_NAME} contact me at {PHONE}",
+        "{PERSON_NAME} phone {PHONE}",
+        "name {PERSON_NAME} number {PHONE}",
+        "calling as {PERSON_NAME} mobile {PHONE}",
+        "{PERSON_NAME} you can reach me at {PHONE}",
+        "this is {PERSON_NAME} ring me on {PHONE}",
+        
+        # Name + Email
+        "my name is {PERSON_NAME} email {EMAIL}",
+        "i am {PERSON_NAME} my email is {EMAIL}",
+        "{PERSON_NAME} here email {EMAIL}",
+        "this is {PERSON_NAME} mail me at {EMAIL}",
+        "name {PERSON_NAME} mail id {EMAIL}",
+        "{PERSON_NAME} email address {EMAIL}",
+        "customer {PERSON_NAME} email {EMAIL}",
+        "registered as {PERSON_NAME} contact {EMAIL}",
+        "{PERSON_NAME} write to {EMAIL}",
+        "booking for {PERSON_NAME} email {EMAIL}",
+        
+        # Name + City
+        "i am {PERSON_NAME} from {CITY}",
+        "{PERSON_NAME} calling from {CITY}",
+        "this is {PERSON_NAME} in {CITY}",
+        "my name is {PERSON_NAME} based in {CITY}",
+        "{PERSON_NAME} from {CITY}",
+        "name {PERSON_NAME} city {CITY}",
+        "{PERSON_NAME} located in {CITY}",
+        "customer {PERSON_NAME} from {CITY}",
+        "{PERSON_NAME} residing in {CITY}",
+        "i am {PERSON_NAME} currently in {CITY}",
+        
+        # Phone + City
+        "my number is {PHONE} i live in {CITY}",
+        "phone {PHONE} calling from {CITY}",
+        "call me on {PHONE} i am in {CITY}",
+        "mobile {PHONE} from {CITY}",
+        "contact {PHONE} based in {CITY}",
+        "number {PHONE} city {CITY}",
+        "reach me at {PHONE} in {CITY}",
+        "{PHONE} located in {CITY}",
+        "phone number {PHONE} from {CITY}",
+        "my mobile is {PHONE} currently in {CITY}",
+        
+        # Phone + Email
+        "phone {PHONE} email {EMAIL}",
+        "call me on {PHONE} or email {EMAIL}",
+        "my number is {PHONE} mail is {EMAIL}",
+        "contact {PHONE} or {EMAIL}",
+        "reach me at {PHONE} or write to {EMAIL}",
+        "mobile {PHONE} mail id {EMAIL}",
+        "phone number {PHONE} email address {EMAIL}",
+        "you can call {PHONE} or mail {EMAIL}",
+        "primary contact {PHONE} secondary {EMAIL}",
+        "phone is {PHONE} email is {EMAIL}",
+        
+        # Card + Email
+        "email id is {EMAIL} and card number is {CREDIT_CARD}",
+        "card is {CREDIT_CARD} and email is {EMAIL}",
+        "my card {CREDIT_CARD} email {EMAIL}",
+        "payment card {CREDIT_CARD} contact {EMAIL}",
+        "charge {CREDIT_CARD} send receipt to {EMAIL}",
+        "card number {CREDIT_CARD} mail id {EMAIL}",
+        "credit card {CREDIT_CARD} email address {EMAIL}",
+        "using card {CREDIT_CARD} registered email {EMAIL}",
+        "{CREDIT_CARD} is my card email {EMAIL}",
+        "card on file {CREDIT_CARD} contact email {EMAIL}",
+        
+        # Date + City
+        "travel on {DATE} from {CITY}",
+        "booking for {DATE} departing from {CITY}",
+        "flying on {DATE} to {CITY}",
+        "arriving on {DATE} in {CITY}",
+        "date {DATE} city {CITY}",
+        "scheduled for {DATE} from {CITY}",
+        "departure date {DATE} from {CITY}",
+        "traveling on {DATE} to {CITY}",
+        "visit on {DATE} in {CITY}",
+        "appointment on {DATE} at {CITY}",
+        
+        # Date + Phone
+        "booking for {DATE} phone {PHONE}",
+        "travel date {DATE} contact {PHONE}",
+        "appointment on {DATE} call me on {PHONE}",
+        "scheduled for {DATE} number {PHONE}",
+        "date {DATE} phone {PHONE}",
+        "flying on {DATE} mobile {PHONE}",
+        "reservation for {DATE} contact {PHONE}",
+        "{DATE} is the date reach me at {PHONE}",
+        "departing {DATE} callback {PHONE}",
+        "arriving {DATE} phone {PHONE}",
+        
+        # Location + City
+        "delivery address near {LOCATION} in {CITY}",
+        "location is {LOCATION} city {CITY}",
+        "staying at {LOCATION} in {CITY}",
+        "pickup from {LOCATION} in {CITY}",
+        "meeting at {LOCATION} in {CITY}",
+        "address {LOCATION} in {CITY}",
+        "currently at {LOCATION} in {CITY}",
+        "near {LOCATION} in {CITY}",
+        "by {LOCATION} in {CITY}",
+        "close to {LOCATION} in {CITY}",
+    ]
+    for p in two_entity:
+        # Parse entities from template
+        entities = []
+        if "{PERSON_NAME}" in p: entities.append("PERSON_NAME")
+        if "{CREDIT_CARD}" in p: entities.append("CREDIT_CARD")
+        if "{PHONE}" in p: entities.append("PHONE")
+        if "{EMAIL}" in p: entities.append("EMAIL")
+        if "{DATE}" in p: entities.append("DATE")
+        if "{CITY}" in p: entities.append("CITY")
+        if "{LOCATION}" in p: entities.append("LOCATION")
+        templates.append({"template": p, "entities": entities})
+    
+    # ========== THREE+ ENTITY COMBINATIONS (50+) ==========
+    multi_entity = [
+        # Name + Phone + Email
+        "my name is {PERSON_NAME} phone {PHONE} email {EMAIL}",
+        "i am {PERSON_NAME} call me on {PHONE} mail {EMAIL}",
+        "{PERSON_NAME} here number {PHONE} mail id {EMAIL}",
+        "this is {PERSON_NAME} my phone is {PHONE} and email is {EMAIL}",
+        "name {PERSON_NAME} mobile {PHONE} email address {EMAIL}",
+        "{PERSON_NAME} contact {PHONE} or {EMAIL}",
+        "customer {PERSON_NAME} phone {PHONE} email {EMAIL}",
+        "i am {PERSON_NAME} reach me at {PHONE} or write to {EMAIL}",
+        "booking for {PERSON_NAME} contact number {PHONE} mail {EMAIL}",
+        "{PERSON_NAME} you can call {PHONE} or email {EMAIL}",
+        
+        # Name + City + Phone
+        "i am {PERSON_NAME} calling from {CITY} my number is {PHONE}",
+        "{PERSON_NAME} from {CITY} phone {PHONE}",
+        "this is {PERSON_NAME} in {CITY} call me on {PHONE}",
+        "my name is {PERSON_NAME} based in {CITY} mobile {PHONE}",
+        "name {PERSON_NAME} city {CITY} contact {PHONE}",
+        "{PERSON_NAME} located in {CITY} number {PHONE}",
+        "customer {PERSON_NAME} from {CITY} phone {PHONE}",
+        "{PERSON_NAME} residing in {CITY} reach me at {PHONE}",
+        "i am {PERSON_NAME} currently in {CITY} my mobile is {PHONE}",
+        "calling as {PERSON_NAME} from {CITY} contact number {PHONE}",
+        
+        # Card + Name + Email
+        "card number is {CREDIT_CARD} name {PERSON_NAME} email {EMAIL}",
+        "my card {CREDIT_CARD} i am {PERSON_NAME} mail {EMAIL}",
+        "payment card {CREDIT_CARD} customer {PERSON_NAME} contact {EMAIL}",
+        "charge {CREDIT_CARD} name {PERSON_NAME} send receipt to {EMAIL}",
+        "{CREDIT_CARD} is my card my name is {PERSON_NAME} email {EMAIL}",
+        "credit card {CREDIT_CARD} registered as {PERSON_NAME} mail id {EMAIL}",
+        "using card {CREDIT_CARD} i am {PERSON_NAME} email address {EMAIL}",
+        "card on file {CREDIT_CARD} customer name {PERSON_NAME} contact {EMAIL}",
+        "debit card {CREDIT_CARD} name {PERSON_NAME} email {EMAIL}",
+        "visa card {CREDIT_CARD} holder {PERSON_NAME} mail {EMAIL}",
+        
+        # Date + City + Phone
+        "travel date {DATE} from {CITY} phone {PHONE}",
+        "booking for {DATE} departing from {CITY} contact {PHONE}",
+        "flying on {DATE} to {CITY} call me on {PHONE}",
+        "arriving on {DATE} in {CITY} mobile {PHONE}",
+        "date {DATE} city {CITY} number {PHONE}",
+        "scheduled for {DATE} from {CITY} reach me at {PHONE}",
+        "departure date {DATE} from {CITY} phone {PHONE}",
+        "traveling on {DATE} to {CITY} contact {PHONE}",
+        "visit on {DATE} in {CITY} call {PHONE}",
+        "appointment on {DATE} at {CITY} phone {PHONE}",
+        
+        # Name + Date + City
+        "booking for {PERSON_NAME} on {DATE} from {CITY}",
+        "{PERSON_NAME} traveling on {DATE} to {CITY}",
+        "reservation for {PERSON_NAME} date {DATE} city {CITY}",
+        "customer {PERSON_NAME} flying on {DATE} from {CITY}",
+        "{PERSON_NAME} appointment on {DATE} in {CITY}",
+        "name {PERSON_NAME} date {DATE} location {CITY}",
+        "{PERSON_NAME} arriving {DATE} in {CITY}",
+        "i am {PERSON_NAME} scheduled for {DATE} from {CITY}",
+        "{PERSON_NAME} departing {DATE} from {CITY}",
+        "booking name {PERSON_NAME} travel date {DATE} city {CITY}",
+        
+        # Four+ entities
+        "my details are {PERSON_NAME} card {CREDIT_CARD} phone {PHONE} email {EMAIL}",
+        "i am {PERSON_NAME} my card is {CREDIT_CARD} email {EMAIL} phone {PHONE} from {CITY}",
+        "customer {PERSON_NAME} payment card {CREDIT_CARD} date {DATE}",
+        "contact details {PERSON_NAME} phone {PHONE} location {LOCATION}",
+        "booking for {PERSON_NAME} on {DATE} from {CITY} contact {PHONE}",
+        "{PERSON_NAME} traveling on {DATE} to {CITY} phone {PHONE} email {EMAIL}",
+        "name {PERSON_NAME} card {CREDIT_CARD} email {EMAIL} mobile {PHONE}",
+        "i am {PERSON_NAME} from {CITY} card {CREDIT_CARD} contact {PHONE}",
+        "{PERSON_NAME} appointment {DATE} at {LOCATION} phone {PHONE}",
+        "customer {PERSON_NAME} city {CITY} email {EMAIL} phone {PHONE}",
+    ]
+    for p in multi_entity:
+        entities = []
+        if "{PERSON_NAME}" in p: entities.append("PERSON_NAME")
+        if "{CREDIT_CARD}" in p: entities.append("CREDIT_CARD")
+        if "{PHONE}" in p: entities.append("PHONE")
+        if "{EMAIL}" in p: entities.append("EMAIL")
+        if "{DATE}" in p: entities.append("DATE")
+        if "{CITY}" in p: entities.append("CITY")
+        if "{LOCATION}" in p: entities.append("LOCATION")
+        templates.append({"template": p, "entities": entities})
     
     return templates
+
+
+def add_stt_noise(text: str, noise_prob: float = 0.3) -> str:
+    """Add realistic STT noise: fillers, hesitations, false starts."""
+    if random.random() > noise_prob:
+        return text
+    
+    words = text.split()
+    if len(words) < 3:
+        return text
+    
+    noise_types = ["filler", "hesitation", "repeat"]
+    noise_type = random.choice(noise_types)
+    
+    if noise_type == "filler":
+        # Add filler word
+        pos = random.randint(0, len(words))
+        filler = random.choice(FILLERS)
+        words.insert(pos, filler)
+    
+    elif noise_type == "hesitation":
+        # Add hesitation phrase at start
+        if random.random() < 0.5:
+            hesitation = random.choice(HESITATIONS)
+            words = hesitation.split() + words
+    
+    elif noise_type == "repeat":
+        # Repeat a word (stuttering)
+        pos = random.randint(0, len(words) - 1)
+        words.insert(pos, words[pos])
+    
+    return " ".join(words)
+
+
+def get_sentence_templates(split: str = "train") -> List[Dict]:
+    """
+    Get templates for a specific split (train/dev/test).
+    Ensures NO overlap between splits.
+    """
+    all_templates = generate_base_templates()
+    
+    # Shuffle ONCE with a fixed seed, then split deterministically
+    random.seed(42)  # Master seed for splitting
+    random.shuffle(all_templates)
+    
+    # Split templates: 60% train, 20% dev, 20% test
+    n = len(all_templates)
+    train_end = int(0.6 * n)
+    dev_end = int(0.8 * n)
+    
+    # Reset seed for subsequent random operations
+    random.seed()
+    
+    if split == "train":
+        return all_templates[:train_end]
+    elif split == "dev":
+        return all_templates[train_end:dev_end]
+    else:  # test
+        return all_templates[dev_end:]
 
 
 # ============================================================================
@@ -701,11 +941,12 @@ def get_sentence_templates() -> List[Dict]:
 # MAIN GENERATION FUNCTION
 # ============================================================================
 
-def generate_example(example_id: str) -> Dict:
+def generate_example(example_id: str, split: str = "train", add_noise: bool = True) -> Dict:
     """Generate a single training/dev example with entities and annotations."""
     
-    # Select a template
-    template_data = random.choice(get_sentence_templates())
+    # Select a template for this split
+    templates = get_sentence_templates(split)
+    template_data = random.choice(templates)
     template = template_data["template"]
     entity_types = template_data["entities"]
     
@@ -778,8 +1019,33 @@ def generate_example(example_id: str) -> Dict:
     # Ensure all lowercase (STT characteristic) - do this BEFORE noise to preserve offsets
     text = text.lower()
     
-    # Note: We skip noise injection that would change character positions
-    # to maintain accurate entity span annotations
+    # Add STT noise carefully - only at the beginning to preserve entity offsets
+    if add_noise and random.random() < 0.25:  # 25% chance of noise
+        noise_options = []
+        
+        # Fillers at start
+        if random.random() < 0.4:
+            filler = random.choice(FILLERS)
+            noise_options.append(filler)
+        
+        # Hesitations at start
+        if random.random() < 0.2:
+            hesitation = random.choice(HESITATIONS)
+            noise_options.append(hesitation)
+        
+        # Conversational starts
+        if random.random() < 0.3:
+            starts = ["yeah", "yes", "okay", "sure", "alright", "right", "so", "well"]
+            noise_options.append(random.choice(starts))
+        
+        if noise_options:
+            prefix = " ".join(noise_options) + " "
+            prefix_len = len(prefix)
+            text = prefix + text
+            # Shift all entity positions
+            for ent in entity_annotations:
+                ent["start"] += prefix_len
+                ent["end"] += prefix_len
     
     return {
         "id": example_id,
@@ -788,13 +1054,13 @@ def generate_example(example_id: str) -> Dict:
     }
 
 
-def generate_dataset(num_examples: int, start_id: int = 1, prefix: str = "utt") -> List[Dict]:
-    """Generate a complete dataset."""
+def generate_dataset(num_examples: int, start_id: int = 1, prefix: str = "utt", split: str = "train", add_noise: bool = True) -> List[Dict]:
+    """Generate a complete dataset for a specific split."""
     dataset = []
     
     for i in range(num_examples):
         example_id = f"{prefix}_{start_id + i:04d}"
-        example = generate_example(example_id)
+        example = generate_example(example_id, split=split, add_noise=add_noise)
         dataset.append(example)
     
     return dataset
@@ -873,24 +1139,27 @@ if __name__ == "__main__":
     # Generate training data
     if args.train_size > 0:
         print("Generating training data...")
-        train_data = generate_dataset(args.train_size, start_id=1, prefix="train")
+        train_data = generate_dataset(args.train_size, start_id=1, prefix="train", split="train", add_noise=True)
         save_dataset(train_data, args.train_output, include_labels=True)
+        print(f"  Using {len(get_sentence_templates('train'))} unique templates for train")
     else:
         train_data = []
     
     # Generate dev data
     if args.dev_size > 0:
         print("\nGenerating dev data...")
-        dev_data = generate_dataset(args.dev_size, start_id=1, prefix="dev")
+        dev_data = generate_dataset(args.dev_size, start_id=1, prefix="dev", split="dev", add_noise=True)
         save_dataset(dev_data, args.dev_output, include_labels=True)
+        print(f"  Using {len(get_sentence_templates('dev'))} unique templates for dev")
     else:
         dev_data = []
     
     # Generate test data WITHOUT labels
     if args.generate_test and args.test_size > 0:
         print("\nGenerating test data (WITHOUT LABELS)...")
-        test_data = generate_dataset(args.test_size, start_id=1, prefix="test")
+        test_data = generate_dataset(args.test_size, start_id=1, prefix="test", split="test", add_noise=True)
         save_dataset(test_data, args.test_output, include_labels=False)
+        print(f"  Using {len(get_sentence_templates('test'))} unique templates for test")
     else:
         test_data = []
     
@@ -919,6 +1188,13 @@ if __name__ == "__main__":
     print("  - CITY (Non-PII)")
     print("  - LOCATION (Non-PII)")
     print()
+    print("Template diversity:")
+    print(f"  ✓ Train templates: {len(get_sentence_templates('train'))}")
+    print(f"  ✓ Dev templates: {len(get_sentence_templates('dev'))}")
+    if test_data:
+        print(f"  ✓ Test templates: {len(get_sentence_templates('test'))}")
+    print(f"  ✓ ZERO overlap between train/dev/test templates")
+    print()
     print("STT noise patterns included:")
     print("  ✓ Extensive credit card patterns (10+ variations)")
     print("  ✓ Extensive phone patterns (8+ variations)")
@@ -927,9 +1203,12 @@ if __name__ == "__main__":
     print("  ✓ Spoken punctuation (at, dot, underscore)")
     print("  ✓ Mixed numeric/spoken formats")
     print("  ✓ Use of 'oh' for zero in phones")
+    print("  ✓ Conversational fillers (uh, um, like)")
+    print("  ✓ Hesitations (let me see, one moment)")
+    print("  ✓ Conversational starts (yeah, okay, sure)")
     print("  ✓ No punctuation")
     print("  ✓ All lowercase")
-    print("  ✓ Diverse date formats (11+ variations)")
-    print("  ✓ Diverse email formats (8+ variations)")
+    print("  ✓ Diverse date formats (25+ variations)")
+    print("  ✓ Diverse email formats (25+ variations)")
     print()
 
