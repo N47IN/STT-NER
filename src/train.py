@@ -7,16 +7,20 @@ from tqdm import tqdm
 from transformers import AutoTokenizer, get_linear_schedule_with_warmup
 
 from dataset import PIIDataset, collate_batch
-from labels import LABELS
+from labels import LABELS, ID2LABEL
 from model import create_model
 
 
-def evaluate(model, dataloader, device):
-    """Simple evaluation function."""
+def evaluate(model, dataloader, device, tokenizer, id2label):
+    """Evaluate using span-level metrics (proper for NER)."""
+    from labels import label_is_pii
+    
     model.eval()
     total_loss = 0.0
-    total_correct = 0
-    total_tokens = 0
+    
+    # Collect all predictions and gold labels for span-level evaluation
+    all_gold_spans = []
+    all_pred_spans = []
     
     with torch.no_grad():
         for batch in dataloader:
@@ -30,18 +34,105 @@ def evaluate(model, dataloader, device):
             
             total_loss += loss.item()
             
-            # Calculate accuracy
-            preds = torch.argmax(logits, dim=-1)
-            mask = (labels != -100)
-            correct = ((preds == labels) & mask).sum().item()
-            total_correct += correct
-            total_tokens += mask.sum().item()
+            # Get predictions
+            preds = torch.argmax(logits, dim=-1).cpu().tolist()
+            
+            # Convert to spans for each example in batch
+            for i, (pred_seq, label_seq, text, offsets) in enumerate(zip(
+                preds, batch["labels"], batch["texts"], batch["offset_mapping"]
+            )):
+                # Convert BIO predictions to spans
+                pred_spans = bio_to_spans(text, offsets, pred_seq, id2label)
+                # Convert gold labels to spans
+                gold_spans = bio_to_spans(text, offsets, label_seq, id2label)
+                
+                all_pred_spans.append(pred_spans)
+                all_gold_spans.append(gold_spans)
     
     avg_loss = total_loss / len(dataloader)
-    accuracy = total_correct / max(1, total_tokens)
+    
+    # Compute span-level metrics
+    tp_pii = fp_pii = fn_pii = 0
+    tp_non = fp_non = fn_non = 0
+    
+    for pred_spans, gold_spans in zip(all_pred_spans, all_gold_spans):
+        gold_pii = set((s, e, "PII") for s, e, lab in gold_spans if label_is_pii(lab))
+        gold_non = set((s, e, "NON") for s, e, lab in gold_spans if not label_is_pii(lab))
+        pred_pii = set((s, e, "PII") for s, e, lab in pred_spans if label_is_pii(lab))
+        pred_non = set((s, e, "NON") for s, e, lab in pred_spans if not label_is_pii(lab))
+        
+        # PII metrics
+        for span in pred_pii:
+            if span in gold_pii:
+                tp_pii += 1
+            else:
+                fp_pii += 1
+        for span in gold_pii:
+            if span not in pred_pii:
+                fn_pii += 1
+        
+        # Non-PII metrics
+        for span in pred_non:
+            if span in gold_non:
+                tp_non += 1
+            else:
+                fp_non += 1
+        for span in gold_non:
+            if span not in pred_non:
+                fn_non += 1
+    
+    # Calculate PII precision (most important metric)
+    pii_precision = tp_pii / max(1, tp_pii + fp_pii)
+    pii_recall = tp_pii / max(1, tp_pii + fn_pii)
+    pii_f1 = 2 * pii_precision * pii_recall / max(1e-10, pii_precision + pii_recall)
     
     model.train()
-    return avg_loss, accuracy
+    return {
+        "loss": avg_loss,
+        "pii_precision": pii_precision,
+        "pii_recall": pii_recall,
+        "pii_f1": pii_f1
+    }
+
+
+def bio_to_spans(text, offsets, label_ids, id2label):
+    """Convert BIO label sequence to entity spans."""
+    spans = []
+    current_label = None
+    current_start = None
+    current_end = None
+    
+    for (start, end), lid in zip(offsets, label_ids):
+        if start == 0 and end == 0:
+            continue  # Special token
+        label = id2label.get(int(lid), "O")
+        if label == "O":
+            if current_label is not None:
+                spans.append((current_start, current_end, current_label))
+                current_label = None
+            continue
+        
+        prefix, ent_type = label.split("-", 1)
+        if prefix == "B":
+            if current_label is not None:
+                spans.append((current_start, current_end, current_label))
+            current_label = ent_type
+            current_start = start
+            current_end = end
+        elif prefix == "I":
+            if current_label == ent_type:
+                current_end = end
+            else:
+                if current_label is not None:
+                    spans.append((current_start, current_end, current_label))
+                current_label = ent_type
+                current_start = start
+                current_end = end
+    
+    if current_label is not None:
+        spans.append((current_start, current_end, current_label))
+    
+    return spans
 
 
 def parse_args():
@@ -113,7 +204,7 @@ def main():
     print()
     
     # Training loop
-    best_dev_loss = float('inf')
+    best_dev_loss = 0.0  # Track best PII precision
     history = []
     
     print("Starting training...")
@@ -144,26 +235,31 @@ def main():
 
         avg_train_loss = running_loss / len(train_dl)
         
-        # Evaluate on dev set
-        dev_loss, dev_acc = evaluate(model, dev_dl, args.device)
+        # Evaluate on dev set (span-level metrics)
+        dev_metrics = evaluate(model, dev_dl, args.device, tokenizer, ID2LABEL)
         
         print(f"\nEpoch {epoch+1}/{args.epochs}:")
         print(f"  Train Loss: {avg_train_loss:.4f}")
-        print(f"  Dev Loss: {dev_loss:.4f}")
-        print(f"  Dev Accuracy: {dev_acc:.4f}")
+        print(f"  Dev Loss: {dev_metrics['loss']:.4f}")
+        print(f"  PII Precision: {dev_metrics['pii_precision']:.4f} (target: ≥0.80)")
+        print(f"  PII Recall: {dev_metrics['pii_recall']:.4f}")
+        print(f"  PII F1: {dev_metrics['pii_f1']:.4f}")
         
         # Save history
         history.append({
             "epoch": epoch + 1,
             "train_loss": avg_train_loss,
-            "dev_loss": dev_loss,
-            "dev_accuracy": dev_acc
+            "dev_loss": dev_metrics['loss'],
+            "pii_precision": dev_metrics['pii_precision'],
+            "pii_recall": dev_metrics['pii_recall'],
+            "pii_f1": dev_metrics['pii_f1']
         })
         
-        # Save best model
-        if dev_loss < best_dev_loss:
-            best_dev_loss = dev_loss
-            print(f"  ✅ Best model so far! Saving checkpoint...")
+        # Save best model based on PII precision (most important metric)
+        current_pii_precision = dev_metrics['pii_precision']
+        if current_pii_precision > best_dev_loss:  # Reusing variable name for simplicity
+            best_dev_loss = current_pii_precision
+            print(f"  ✅ Best PII precision so far! Saving checkpoint...")
             model.save_pretrained(args.out_dir)
             tokenizer.save_pretrained(args.out_dir)
         
