@@ -44,11 +44,29 @@ class PIIDataset(Dataset):
                 bio_tags = []
                 for (start, end) in offsets:
                     if start == end:
+                        # Special tokens ([CLS], [SEP], [PAD])
                         bio_tags.append("O")
                     else:
-                        if start < len(char_tags):
-                            bio_tags.append(char_tags[start])
+                        # Check all characters in the token span for entity labels
+                        # Priority: B- tags first, then I- tags, then O
+                        token_labels = []
+                        for char_idx in range(start, min(end, len(char_tags))):
+                            if char_idx < len(char_tags):
+                                token_labels.append(char_tags[char_idx])
+                        
+                        # Find the most appropriate label
+                        # Priority: B- > I- > O (prefer entity labels)
+                        b_labels = [l for l in token_labels if l.startswith("B-")]
+                        i_labels = [l for l in token_labels if l.startswith("I-")]
+                        
+                        if b_labels:
+                            # Use the first B- label
+                            bio_tags.append(b_labels[0])
+                        elif i_labels:
+                            # Use the first I- label
+                            bio_tags.append(i_labels[0])
                         else:
+                            # All are "O"
                             bio_tags.append("O")
 
                 if len(bio_tags) != len(input_ids):
