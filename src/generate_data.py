@@ -57,18 +57,18 @@ EMAIL_DOMAINS = [
 
 EMAIL_EXTENSIONS = ["com", "co dot in", "in", "org", "net", "edu"]
 
-# Number words for STT
+# Number words for STT (with common misrecognitions!)
 DIGIT_WORDS = {
-    "0": ["zero", "oh"],
-    "1": ["one"],
-    "2": ["two"],
-    "3": ["three"],
-    "4": ["four"],
-    "5": ["five"],
-    "6": ["six"],
+    "0": ["zero", "oh", "o"],  # Added "o"
+    "1": ["one", "won"],  # Common confusion
+    "2": ["two", "to", "too"],  # Common confusion
+    "3": ["three", "tree"],  # Misheard
+    "4": ["four", "for"],  # Common confusion
+    "5": ["five", "hive"],  # Misheard (rare)
+    "6": ["six", "sex"],  # Misheard (rare)
     "7": ["seven"],
-    "8": ["eight"],
-    "9": ["nine"]
+    "8": ["eight", "ate"],  # Common confusion
+    "9": ["nine", "wine"]  # Misheard (rare)
 }
 
 DOUBLE_DIGIT_WORDS = {
@@ -154,20 +154,22 @@ def number_to_spoken(num_str: str, style: str = "mixed") -> str:
     
     elif style == "mixed":
         # Mix of digits and words: "4242 4242" or "four two four two 4242"
-        if random.random() < 0.4:
+        # INCREASED MIXING for more realistic STT noise
+        if random.random() < 0.25:  # Reduced from 0.4
             return num_str  # Keep as digits
-        elif random.random() < 0.5:
+        elif random.random() < 0.35:  # Some fully spoken
             return number_to_spoken(num_str, "digit_by_digit")
         else:
-            # Partial conversion
+            # Partial conversion with MORE randomness
             parts = []
-            chunk_size = random.choice([2, 4])
+            chunk_size = random.choice([1, 2, 2, 3, 4])  # More varied chunk sizes
             for i in range(0, len(num_str), chunk_size):
                 chunk = num_str[i:i+chunk_size]
-                if random.random() < 0.5:
-                    parts.append(chunk)
-                else:
+                # 60% spoken, 40% numeric (more spoken = more noise)
+                if random.random() < 0.6:
                     parts.append(number_to_spoken(chunk, "digit_by_digit"))
+                else:
+                    parts.append(chunk)
             return " ".join(parts)
     
     return num_str
@@ -190,6 +192,11 @@ def generate_credit_card() -> str:
     ]
     
     card = random.choice(patterns)
+    
+    # Apply digit substitution errors (STT mishearing digits)
+    # 15% chance of having wrong digits
+    if random.random() < 0.15:
+        card = add_digit_substitution_noise(card, error_rate=1.0)
     
     # Add spaces in groups of 4
     card_spaced = " ".join([card[i:i+4] for i in range(0, len(card), 4)])
@@ -276,6 +283,11 @@ def generate_phone() -> str:
     prefix = random.choice(prefixes)
     rest = "".join([str(random.randint(0, 9)) for _ in range(8)])
     phone = prefix + rest
+    
+    # Apply digit substitution errors (STT mishearing digits)
+    # 10% chance of having wrong digits
+    if random.random() < 0.10:
+        phone = add_digit_substitution_noise(phone, error_rate=1.0)
     
     # VASTLY EXPANDED STT PATTERNS for phone numbers
     patterns = [
@@ -870,34 +882,60 @@ def generate_base_templates() -> List[Dict]:
     return templates
 
 
-def add_stt_noise(text: str, noise_prob: float = 0.3) -> str:
-    """Add realistic STT noise: fillers, hesitations, false starts."""
+def add_stt_noise(text: str, noise_prob: float = 0.7) -> str:
+    """Add realistic STT noise: fillers, hesitations, false starts, repetitions."""
+    # MUCH higher noise probability - this is STT!
     if random.random() > noise_prob:
         return text
     
     words = text.split()
-    if len(words) < 3:
+    if len(words) < 2:
         return text
     
-    noise_types = ["filler", "hesitation", "repeat"]
-    noise_type = random.choice(noise_types)
+    # Apply MULTIPLE noise types to single utterance (more realistic)
+    num_noise_ops = random.choices([1, 2, 3], weights=[0.5, 0.35, 0.15])[0]
     
-    if noise_type == "filler":
-        # Add filler word
-        pos = random.randint(0, len(words))
-        filler = random.choice(FILLERS)
-        words.insert(pos, filler)
-    
-    elif noise_type == "hesitation":
-        # Add hesitation phrase at start
-        if random.random() < 0.5:
+    for _ in range(num_noise_ops):
+        if len(words) < 2:
+            break
+            
+        noise_type = random.choice(["filler", "hesitation", "repeat", "false_start", "pause_word"])
+        
+        if noise_type == "filler":
+            # Add filler word at random position (not just start!)
+            pos = random.randint(0, len(words))
+            filler = random.choice(FILLERS)
+            words.insert(pos, filler)
+        
+        elif noise_type == "hesitation":
+            # Add hesitation phrase (usually at start, but not always)
             hesitation = random.choice(HESITATIONS)
-            words = hesitation.split() + words
-    
-    elif noise_type == "repeat":
-        # Repeat a word (stuttering)
-        pos = random.randint(0, len(words) - 1)
-        words.insert(pos, words[pos])
+            if random.random() < 0.8:  # 80% at start
+                words = hesitation.split() + words
+            else:  # 20% in middle
+                pos = random.randint(1, max(1, len(words) // 2))
+                words = words[:pos] + hesitation.split() + words[pos:]
+        
+        elif noise_type == "repeat":
+            # Repeat a word (stuttering) - more common in STT
+            pos = random.randint(0, len(words) - 1)
+            # Sometimes repeat 2-3 times (severe stutter)
+            repeats = random.choice([1, 1, 1, 2])
+            for _ in range(repeats):
+                words.insert(pos, words[pos])
+        
+        elif noise_type == "false_start":
+            # False start: add incomplete word/phrase at beginning
+            false_starts = ["i", "my", "the", "so", "and", "but", "can you", "sorry", "wait"]
+            if random.random() < 0.3:
+                starter = random.choice(false_starts)
+                words = starter.split() + words
+        
+        elif noise_type == "pause_word":
+            # Add pause markers common in STT
+            pauses = ["uh", "um", "er", "ah"]
+            pos = random.randint(0, len(words))
+            words.insert(pos, random.choice(pauses))
     
     return " ".join(words)
 
@@ -933,6 +971,217 @@ def get_sentence_templates(split: str = "train") -> List[Dict]:
 # NOISE INJECTION
 # ============================================================================
 
+# STT word confusions (homophones and near-homophones)
+STT_CONFUSIONS = {
+    "two": ["to", "too"],
+    "to": ["two", "too"],
+    "four": ["for"],
+    "for": ["four"],
+    "eight": ["ate"],
+    "one": ["won"],
+    "won": ["one"],
+    "by": ["buy", "bye"],
+    "no": ["know"],
+    "know": ["no"],
+}
+
+# Common functional words that STT systems often miss or mishear (acoustic errors)
+FUNCTIONAL_WORDS = {
+    "articles": ["a", "an", "the"],
+    "prepositions": ["is", "was", "for", "in", "to", "at", "on", "of", "from"],
+    "conjunctions": ["and", "or", "but"],
+    "auxiliaries": ["is", "was", "are", "were", "have", "has", "had"],
+}
+
+# Common filler words that might replace functional words (acoustic substitution)
+ACOUSTIC_SUBSTITUTIONS = ["like", "so", "um", "uh", "you know", "well", "actually"]
+
+def add_word_confusions(text: str, confusion_prob: float = 0.15) -> str:
+    """Add realistic STT word confusions (homophones)."""
+    if random.random() > confusion_prob:
+        return text
+    
+    words = text.split()
+    if len(words) < 3:
+        return text
+    
+    # Pick 1-2 words to confuse
+    num_confusions = random.choice([1, 1, 2])
+    available_indices = [i for i, w in enumerate(words) if w in STT_CONFUSIONS]
+    
+    if not available_indices:
+        return text
+    
+    num_confusions = min(num_confusions, len(available_indices))
+    indices_to_confuse = random.sample(available_indices, num_confusions)
+    
+    for idx in indices_to_confuse:
+        original = words[idx]
+        if original in STT_CONFUSIONS:
+            words[idx] = random.choice(STT_CONFUSIONS[original])
+    
+    return " ".join(words)
+
+
+def add_acoustic_noise(text: str, entity_annotations: List[Dict], deletion_prob: float = 0.03, substitution_prob: float = 0.03) -> tuple:
+    """
+    Add realistic acoustic STT noise: random word deletions and substitutions.
+    Simulates acoustic errors that cause STT to miss or mishear common functional words.
+    
+    Args:
+        text: Original text
+        entity_annotations: List of entity annotations (start, end, label)
+        deletion_prob: Probability of deleting a functional word
+        substitution_prob: Probability of substituting a functional word
+    
+    Returns:
+        (modified_text, adjusted_annotations) - Text with noise and adjusted entity positions
+    """
+    words = text.split()
+    if len(words) < 3:
+        return text, entity_annotations
+    
+    # Build word-level positions for entity tracking
+    word_positions = []
+    char_pos = 0
+    for i, word in enumerate(words):
+        start = char_pos
+        end = char_pos + len(word)
+        word_positions.append((i, start, end, word))
+        char_pos = end + 1  # +1 for space
+    
+    # Collect all functional words and their positions
+    functional_word_indices = []
+    all_functional = []
+    for word_list in FUNCTIONAL_WORDS.values():
+        all_functional.extend(word_list)
+    
+    for i, (word_idx, start, end, word) in enumerate(word_positions):
+        if word.lower() in all_functional:
+            functional_word_indices.append(i)
+    
+    if not functional_word_indices:
+        return text, entity_annotations
+    
+    # Track modifications for entity position adjustment
+    char_offset = 0
+    deleted_indices = set()
+    modified_annotations = []
+    
+    # Apply deletions (simulate acoustic dropout)
+    if random.random() < deletion_prob and functional_word_indices:
+        idx_to_delete = random.choice(functional_word_indices)
+        word_idx, start, end, word = word_positions[idx_to_delete]
+        
+        # Don't delete if it would break entity boundaries
+        # Check if this word overlaps with any entity
+        overlaps_entity = False
+        for ent in entity_annotations:
+            if start < ent["end"] and end > ent["start"]:
+                overlaps_entity = True
+                break
+        
+        if not overlaps_entity:
+            deleted_indices.add(idx_to_delete)
+            char_offset -= (end - start + 1)  # Remove word + space
+    
+    # Apply substitutions (simulate acoustic mishearing)
+    substitutions = {}
+    if random.random() < substitution_prob and functional_word_indices:
+        available = [i for i in functional_word_indices if i not in deleted_indices]
+        if available:
+            idx_to_sub = random.choice(available)
+            word_idx, start, end, word = word_positions[idx_to_sub]
+            
+            # Don't substitute if it overlaps with entities
+            overlaps_entity = False
+            for ent in entity_annotations:
+                if start < ent["end"] and end > ent["start"]:
+                    overlaps_entity = True
+                    break
+            
+            if not overlaps_entity:
+                substitute = random.choice(ACOUSTIC_SUBSTITUTIONS)
+                substitutions[idx_to_sub] = (word, substitute)
+                # Adjust offset: new word might be different length
+                char_offset += len(substitute) - len(word)
+    
+    # Build modified text and adjust entity positions
+    modified_words = []
+    for i, (word_idx, start, end, word) in enumerate(word_positions):
+        if i in deleted_indices:
+            continue
+        elif i in substitutions:
+            modified_words.append(substitutions[i][1])
+        else:
+            modified_words.append(word)
+    
+    modified_text = " ".join(modified_words)
+    
+    # Adjust entity annotations for deletions/substitutions
+    for ent in entity_annotations:
+        # Count how many characters were removed/added before this entity
+        offset = 0
+        for i, (word_idx, start, end, word) in enumerate(word_positions):
+            if i in deleted_indices and end <= ent["start"]:
+                offset -= (end - start + 1)
+            elif i in substitutions and end <= ent["start"]:
+                old_word, new_word = substitutions[i]
+                offset += len(new_word) - len(old_word)
+            elif i in deleted_indices and start < ent["start"] < end:
+                # Entity starts inside deleted word - shouldn't happen, but handle gracefully
+                offset -= (ent["start"] - start)
+        
+        new_start = max(0, ent["start"] + offset)
+        new_end = max(new_start, ent["end"] + offset)
+        
+        # Ensure new positions are within modified text bounds
+        new_end = min(new_end, len(modified_text))
+        new_start = min(new_start, new_end)
+        
+        modified_annotations.append({
+            "start": new_start,
+            "end": new_end,
+            "label": ent["label"]
+        })
+    
+    return modified_text, modified_annotations
+
+
+def add_digit_substitution_noise(num_str: str, error_rate: float = 0.10) -> str:
+    """
+    Add random digit substitution errors (very common in STT).
+    E.g., "8" might be heard as "9", creating "9876543210" instead of "8876543210"
+    """
+    if random.random() > error_rate:
+        return num_str
+    
+    # Substitute 1-2 digits randomly
+    if len(num_str) < 4:
+        return num_str
+    
+    num_errors = random.choice([1, 1, 2])  # Usually 1 error, sometimes 2
+    digits = list(num_str)
+    
+    for _ in range(num_errors):
+        if len(digits) < 1:
+            break
+        # Pick a random position
+        pos = random.randint(0, len(digits) - 1)
+        if digits[pos].isdigit():
+            # Substitute with a nearby digit (common STT error)
+            current = int(digits[pos])
+            # Adjacent digits are more likely to be confused
+            nearby = [
+                (current - 1) % 10,
+                (current + 1) % 10,
+                (current - 2) % 10,
+                (current + 2) % 10,
+            ]
+            digits[pos] = str(random.choice(nearby))
+    
+    return "".join(digits)
+
 # Note: We add noise during template selection and entity generation
 # rather than post-processing to preserve entity span annotations
 
@@ -949,6 +1198,11 @@ def generate_example(example_id: str, split: str = "train", add_noise: bool = Tr
     template_data = random.choice(templates)
     template = template_data["template"]
     entity_types = template_data["entities"]
+    
+    # Apply word confusions to template (before entity generation)
+    # This ensures entity positions remain correct
+    if add_noise and random.random() < 0.20:  # 20% of templates get word confusions
+        template = add_word_confusions(template)
     
     # Generate entities
     generated_entities = {}
@@ -1019,26 +1273,35 @@ def generate_example(example_id: str, split: str = "train", add_noise: bool = Tr
     # Ensure all lowercase (STT characteristic) - do this BEFORE noise to preserve offsets
     text = text.lower()
     
-    # Add STT noise carefully - only at the beginning to preserve entity offsets
-    if add_noise and random.random() < 0.25:  # 25% chance of noise
+    # Add STT noise carefully - MUCH MORE frequently for realistic STT
+    if add_noise and random.random() < 0.65:  # 65% chance of noise (realistic for STT!)
         noise_options = []
         
-        # Fillers at start
-        if random.random() < 0.4:
+        # Fillers at start (more common)
+        if random.random() < 0.5:
             filler = random.choice(FILLERS)
             noise_options.append(filler)
         
         # Hesitations at start
-        if random.random() < 0.2:
+        if random.random() < 0.3:
             hesitation = random.choice(HESITATIONS)
             noise_options.append(hesitation)
         
-        # Conversational starts
-        if random.random() < 0.3:
-            starts = ["yeah", "yes", "okay", "sure", "alright", "right", "so", "well"]
+        # Conversational starts (very common in calls)
+        if random.random() < 0.4:
+            starts = ["yeah", "yes", "okay", "sure", "alright", "right", "so", "well", "hi", "hello"]
             noise_options.append(random.choice(starts))
         
+        # False starts (common in STT)
+        if random.random() < 0.25:
+            false_starts = ["i mean", "like i said", "you know what", "so basically"]
+            noise_options.append(random.choice(false_starts))
+        
         if noise_options:
+            # Shuffle noise options for variety
+            random.shuffle(noise_options)
+            # Don't add ALL options, pick 1-2
+            noise_options = noise_options[:random.choice([1, 1, 2])]
             prefix = " ".join(noise_options) + " "
             prefix_len = len(prefix)
             text = prefix + text
@@ -1046,6 +1309,24 @@ def generate_example(example_id: str, split: str = "train", add_noise: bool = Tr
             for ent in entity_annotations:
                 ent["start"] += prefix_len
                 ent["end"] += prefix_len
+    
+    # ADDITIONALLY: Add suffix noise (safe - doesn't affect entity positions)
+    if add_noise and random.random() < 0.3:
+        # Add conversational endings
+        suffixes = ["thanks", "thank you", "please", "okay", "got it", "thats it", "thats all"]
+        suffix = random.choice(suffixes)
+        text = text + " " + suffix
+    
+    # STT GARBLING: Sometimes add garbled/cut-off endings (very common in real STT)
+    if add_noise and random.random() < 0.15:
+        # Add incomplete/garbled suffix
+        garbled = ["sorry what", "can you", "wait a", "hold on", "one sec", "just"]
+        text = text + " " + random.choice(garbled)
+    
+    # ACOUSTIC NOISE: Add realistic word-level errors (deletions/substitutions)
+    # This simulates acoustic STT errors that break template patterns
+    if add_noise:
+        text, entity_annotations = add_acoustic_noise(text, entity_annotations)
     
     return {
         "id": example_id,

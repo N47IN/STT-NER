@@ -14,13 +14,24 @@ def main():
     ap.add_argument("--input", default="data/dev.jsonl")
     ap.add_argument("--max_length", type=int, default=256)
     ap.add_argument("--runs", type=int, default=50)
-    ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument("--device", default="cpu", help="Device for inference (default: cpu, as per assignment)")
+    ap.add_argument("--quantize", action="store_true", help="Use INT8 quantization for CPU (simple speedup)")
     args = ap.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_dir if args.model_name is None else args.model_name)
     model = AutoModelForTokenClassification.from_pretrained(args.model_dir)
     model.to(args.device)
     model.eval()
+    
+    # Apply simple INT8 quantization for CPU
+    if args.quantize and args.device == "cpu":
+        try:
+            model = torch.quantization.quantize_dynamic(
+                model, {torch.nn.Linear}, dtype=torch.qint8
+            )
+            print("Applied INT8 quantization")
+        except Exception as e:
+            print(f"Quantization failed: {e}, continuing without quantization")
 
     texts = []
     with open(args.input, "r", encoding="utf-8") as f:
@@ -43,7 +54,7 @@ def main():
             max_length=args.max_length,
             return_tensors="pt",
         )
-        with torch.no_grad():
+        with torch.inference_mode():
             _ = model(input_ids=enc["input_ids"].to(args.device), attention_mask=enc["attention_mask"].to(args.device))
 
     for i in range(args.runs):
@@ -55,7 +66,7 @@ def main():
             return_tensors="pt",
         )
         start = time.perf_counter()
-        with torch.no_grad():
+        with torch.inference_mode():
             _ = model(input_ids=enc["input_ids"].to(args.device), attention_mask=enc["attention_mask"].to(args.device))
         end = time.perf_counter()
         times_ms.append((end - start) * 1000.0)

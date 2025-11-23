@@ -54,6 +54,7 @@ def main():
     ap.add_argument("--max_length", type=int, default=256)
     ap.add_argument(
         "--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument("--quantize", action="store_true", help="Use INT8 quantization for CPU (simple speedup)")
     args = ap.parse_args()
 
     tokenizer = AutoTokenizer.from_pretrained(
@@ -61,6 +62,16 @@ def main():
     model = AutoModelForTokenClassification.from_pretrained(args.model_dir)
     model.to(args.device)
     model.eval()
+    
+    # Apply simple INT8 quantization for CPU
+    if args.quantize and args.device == "cpu":
+        try:
+            model = torch.quantization.quantize_dynamic(
+                model, {torch.nn.Linear}, dtype=torch.qint8
+            )
+            print("Applied INT8 quantization")
+        except Exception as e:
+            print(f"Quantization failed: {e}, continuing without quantization")
 
     results = {}
 

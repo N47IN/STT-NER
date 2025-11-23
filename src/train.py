@@ -2,6 +2,7 @@ import os
 import argparse
 import torch
 import json
+import random
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoTokenizer, get_linear_schedule_with_warmup
@@ -146,6 +147,9 @@ def parse_args():
     ap.add_argument("--lr", type=float, default=3e-5)
     ap.add_argument("--max_length", type=int, default=256)
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    ap.add_argument("--label_smoothing", type=float, default=0.1, help="Label smoothing factor (reduces overconfidence)")
+    ap.add_argument("--classifier_dropout", type=float, default=0.2, help="Dropout probability for classifier")
+    ap.add_argument("--early_stopping_patience", type=int, default=3, help="Stop if no improvement for N epochs")
     return ap.parse_args()
 
 
@@ -187,11 +191,21 @@ def main():
         collate_fn=lambda b: collate_batch(b, pad_token_id=tokenizer.pad_token_id),
     )
 
-    # Create model
-    print("Creating model...")
-    model = create_model(args.model_name)
+    # Create model with enhanced regularization
+    print("Creating model with dropout regularization...")
+    model = create_model(args.model_name, classifier_dropout=args.classifier_dropout)
     model.to(args.device)
     model.train()
+    
+    print(f"  Classifier dropout: {args.classifier_dropout}")
+    print(f"  Label smoothing: {args.label_smoothing}")
+    print(f"  Early stopping patience: {args.early_stopping_patience}")
+    
+    # Create loss function with label smoothing
+    loss_fn = torch.nn.CrossEntropyLoss(
+        ignore_index=-100,
+        label_smoothing=args.label_smoothing
+    )
 
     # Optimizer and scheduler
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
@@ -203,8 +217,9 @@ def main():
     print(f"Total training steps: {total_steps}")
     print()
     
-    # Training loop
-    best_dev_loss = 0.0  # Track best PII precision
+    # Training loop with early stopping
+    best_dev_precision = 0.0  # Track best PII precision
+    epochs_without_improvement = 0
     history = []
     
     print("Starting training...")
@@ -219,8 +234,13 @@ def main():
             attention_mask = torch.tensor(batch["attention_mask"], device=args.device)
             labels = torch.tensor(batch["labels"], device=args.device)
 
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            loss = outputs.loss
+            # Forward pass (without computing loss internally)
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            logits = outputs.logits
+            
+            # Compute loss with label smoothing
+            # Reshape for loss computation: (batch * seq_len, num_labels) vs (batch * seq_len)
+            loss = loss_fn(logits.view(-1, len(LABELS)), labels.view(-1))
 
             optimizer.zero_grad()
             loss.backward()
@@ -257,17 +277,29 @@ def main():
         
         # Save best model based on PII precision (most important metric)
         current_pii_precision = dev_metrics['pii_precision']
-        if current_pii_precision > best_dev_loss:  # Reusing variable name for simplicity
-            best_dev_loss = current_pii_precision
+        if current_pii_precision > best_dev_precision:
+            best_dev_precision = current_pii_precision
+            epochs_without_improvement = 0
             print(f"  ✅ Best PII precision so far! Saving checkpoint...")
             model.save_pretrained(args.out_dir)
             tokenizer.save_pretrained(args.out_dir)
+        else:
+            epochs_without_improvement += 1
+            print(f"  ⚠️  No improvement for {epochs_without_improvement} epoch(s)")
         
         # Save checkpoint for this epoch
         epoch_dir = os.path.join(args.out_dir, f"checkpoint-epoch-{epoch+1}")
         os.makedirs(epoch_dir, exist_ok=True)
         model.save_pretrained(epoch_dir)
         print(f"  Checkpoint saved: {epoch_dir}")
+        
+        # Early stopping check
+        if epochs_without_improvement >= args.early_stopping_patience:
+            print(f"\n⚠️  Early stopping triggered after {epoch+1} epochs")
+            print(f"  No improvement in PII precision for {args.early_stopping_patience} epochs")
+            print(f"  Best PII precision: {best_dev_precision:.4f}")
+            break
+        
         print()
 
     # Save final model (last epoch)
